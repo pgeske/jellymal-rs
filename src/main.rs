@@ -1,8 +1,8 @@
-use log::{info, debug};
+use log::{debug, info};
 use mal::MyAnimeListApi;
 use mapping::tvdb_id_to_mal_id;
 
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use jellyfin::JellyfinApi;
 use std::env;
 
@@ -11,11 +11,9 @@ mod mal;
 mod mapping;
 mod oauth;
 
-
 const MAL_AUTH_URL: &str = "https://myanimelist.net/v1/oauth2/authorize";
 const MAL_TOKEN_URL: &str = "https://myanimelist.net/v1/oauth2/token";
 const MAL_TOKEN_PATH: &str = "./token.json";
-
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -46,7 +44,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         MAL_TOKEN_URL,
         &env::var("MAL_API_REDIRECT_URL")?,
         MAL_TOKEN_PATH,
-    ).await?;
+    )
+    .await?;
 
     // initialize the mal api
     let mal_api: MyAnimeListApi = MyAnimeListApi::new(mal_token);
@@ -57,7 +56,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mal_id = tvdb_id_to_mal_id(tvdb_id, episode.season_number)?;
         let mal_latest_episode_number = mal_api.get_latest_episode_number(mal_id).await?;
         if episode.number > mal_latest_episode_number {
-            info!("setting latest episode of series {} (mal-id: {}) to {}", episode.series_name, mal_id, episode.number);
+            info!(
+                "setting latest episode of series {} (mal-id: {}) to {}",
+                episode.series_name, mal_id, episode.number
+            );
             mal_api
                 .set_latest_episode_number(mal_id, episode.number)
                 .await?;

@@ -4,8 +4,8 @@ use oauth2::basic::{BasicClient, BasicTokenType};
 use oauth2::reqwest::async_http_client;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields,
-    PkceCodeChallenge, RedirectUrl, RefreshToken, Scope, StandardTokenResponse,
-    TokenResponse, TokenUrl,
+    PkceCodeChallenge, RedirectUrl, RefreshToken, Scope, StandardTokenResponse, TokenResponse,
+    TokenUrl,
 };
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -77,7 +77,7 @@ pub async fn initialize_token(
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_plain();
 
     // get the authorization url
-    let (auth_url, csrf_token) = client
+    let (auth_url, _) = client
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new("read".to_string()))
         .add_scope(Scope::new("write".to_string()))
@@ -95,7 +95,6 @@ pub async fn initialize_token(
     let parsed_url = Url::parse(&redirect_url)?;
     let query_pairs: url::form_urlencoded::Parse<'_> = parsed_url.query_pairs();
     let code: String = get_query_param("code", query_pairs)?;
-    let state: String = get_query_param("state", query_pairs)?;
 
     // exchange the code for a token
     let token_result: StandardTokenResponse<EmptyExtraTokenFields, oauth2::basic::BasicTokenType> =
@@ -106,13 +105,6 @@ pub async fn initialize_token(
             .await?;
 
     ClientToken::try_from(token_result)
-}
-
-pub fn load_client_token(token_json_path: &str) -> anyhow::Result<ClientToken> {
-    let file = File::open("token.json")?;
-    let reader = BufReader::new(file);
-    let client_token: ClientToken = serde_json::from_reader(reader)?;
-    Ok(client_token)
 }
 
 pub async fn refresh_token(
@@ -150,7 +142,6 @@ pub async fn load_or_refresh_token(
 ) -> Result<ClientToken> {
     // generate a new token from scratch, since there's no stored tokens
     let mut client_token: ClientToken;
-    let current_time_ms = Utc::now().timestamp_millis();
     if !Path::new(token_path).exists() {
         client_token =
             initialize_token(client_id, client_secret, auth_url, token_url, redirect_url).await?;

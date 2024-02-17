@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash};
+use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
 use reqwest::Response;
@@ -49,13 +49,6 @@ pub struct Episode {
     pub watched: bool,
 }
 
-pub struct Movie {
-    pub id: String,
-    pub number: i32,
-    pub name: String,
-    pub user_data: UserData,
-}
-
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct UserData {
@@ -73,11 +66,7 @@ impl JellyfinApi {
         }
     }
 
-    async fn get(
-        &self,
-        route: &str,
-        params: Option<HashMap<&str, String>>,
-    ) -> Result<Response> {
+    async fn get(&self, route: &str, params: Option<HashMap<&str, String>>) -> Result<Response> {
         let url = format!("{}{}", self.host, route);
         let mut request_builder = self.client.get(url).header("X-Emby-Token", &self.token);
         if let Some(p) = params {
@@ -112,9 +101,12 @@ impl JellyfinApi {
 
         for item in items {
             if item.media_type == "Episode" {
-                if item.index_number.is_none() { continue; }
+                if item.index_number.is_none() {
+                    continue;
+                }
                 let series_name = item.series_name.ok_or(anyhow!("episode missing series"))?;
-                let index_number: i32 = item.index_number.ok_or(anyhow!("episode missing number"))?;
+                let index_number: i32 =
+                    item.index_number.ok_or(anyhow!("episode missing number"))?;
                 let season_number = item
                     .parent_index_number
                     .ok_or(anyhow!("episode missing season number"))?;
@@ -126,8 +118,8 @@ impl JellyfinApi {
                     id: item.id,
                     number: index_number,
                     name: item.name,
-                    season_number: season_number,
-                    series_name: series_name,
+                    season_number,
+                    series_name,
                     watched: item.user_data.played,
                     tvdb_id: tvdb_id.clone().parse()?,
                 });
@@ -149,7 +141,7 @@ impl JellyfinApi {
             if !episode.watched {
                 return;
             }
-            let tvdb_id = episode.tvdb_id.clone();
+            let tvdb_id = episode.tvdb_id;
             if let Some(other) = status.get(&tvdb_id) {
                 if episode.season_number >= other.season_number && episode.number > other.number {
                     status.insert(tvdb_id, episode);
