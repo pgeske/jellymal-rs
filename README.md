@@ -32,7 +32,7 @@ You'll also need to make sure you've registered a new MAL client with the MAL AP
 
 ## Setup
 ### First Time
-Make sure the user the container runs as has access to the data directory (which holds the tokens) that you mounted onto the container.
+For the first time setup, we'll run the container directly. That's because we'll need to interact with it to initialize the MAL oauth token for the first time. After they've been acquired and saved (into the `/data` directory), `jellymal-rs` will automatically refresh them before they expire. So this manual interaction is only required once, for first time setup.
 ```bash
 # create the data directory that you are mounting in your compose, and make sure
 # the user the container runs as can write to it
@@ -46,6 +46,7 @@ sudo docker compose -f /path/to/your/docker-compose.yml run --rm jellymal
 After that, follow the instructions presented to you, and quit out of the container (`Ctrl-C`) when complete. 
 
 ### After First Time
+Just kick off the container as part of your normal docker compose (or other) setup.
 ```
 sudo docker compose up /path/to/your/docker-compose.yml
 ```
