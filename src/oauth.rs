@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use chrono::Utc;
+use log::debug;
 use oauth2::basic::{BasicClient, BasicTokenType};
 use oauth2::reqwest::async_http_client;
 use oauth2::{
@@ -140,8 +141,8 @@ pub async fn load_or_refresh_token(
     redirect_url: &str,
     token_path: &str,
 ) -> Result<ClientToken> {
-    // generate a new token from scratch, since there's no stored tokens
     let mut client_token: ClientToken;
+    debug!("loading the token from {}", token_path.to_string());
     if !Path::new(token_path).exists() {
         client_token =
             initialize_token(client_id, client_secret, auth_url, token_url, redirect_url).await?;
@@ -157,16 +158,19 @@ pub async fn load_or_refresh_token(
     let current_time_millis = Utc::now().timestamp_millis();
     let five_days_millis = 1000 * 60 * 60 * 24 * 5;
     if client_token.expiration_date <= current_time_millis {
+        debug!("generating a new token from scratch");
         client_token =
             initialize_token(client_id, client_secret, auth_url, token_url, redirect_url).await?;
     }
     // the client token is close to expiration. refresh it
     else if current_time_millis - client_token.expiration_date >= five_days_millis {
+        debug!("refreshing the token");
         client_token =
             refresh_token(client_id, client_secret, auth_url, token_url, client_token).await?;
     }
 
     // save the client token to disk so that it can be reused
+    debug!("persisting the token to disk at {}", token_path);
     let file = File::create(token_path)?;
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &client_token)?;

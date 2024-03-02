@@ -16,8 +16,8 @@ COPY ./src ./src
 RUN cargo build --release
 
 # set environment
-ENV RUST_BACKTRACE=1
+ENV RUST_LIB_BACKTRACE=0
 ENV RUST_LOG=info
 
 COPY ./entry-point.sh ./
-CMD /app/entry-point.sh
+ENTRYPOINT ["./entry-point.sh"]

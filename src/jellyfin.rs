@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use reqwest::Response;
 use serde::{Deserialize, Serialize};
 
@@ -143,7 +143,9 @@ impl JellyfinApi {
             }
             let tvdb_id = episode.tvdb_id;
             if let Some(other) = status.get(&tvdb_id) {
-                if episode.season_number >= other.season_number && episode.number > other.number {
+                if episode.season_number > other.season_number
+                    || episode.season_number == other.season_number && episode.number > other.number
+                {
                     status.insert(tvdb_id, episode);
                 }
             } else {
@@ -168,7 +170,8 @@ impl JellyfinApi {
             // get all items under this root
             let response: Response = self.get("/Items", Some(params)).await?;
             let text: String = response.text().await?;
-            let items_response: ItemsResponse = serde_json::from_str(&text)?;
+            let items_response: ItemsResponse =
+                serde_json::from_str(&text).context("unable to parse items")?;
             for item in items_response.items {
                 if item.is_folder {
                     frontier.push(Some(item.id.clone()));
@@ -177,5 +180,188 @@ impl JellyfinApi {
             }
         }
         Ok(media)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::*;
+    #[tokio::test]
+    async fn test_get_user_id() -> anyhow::Result<()> {
+        let server = MockServer::start().await;
+        let jellyfin_client = JellyfinApi::new(&server.uri(), "token");
+        let user_id = "123";
+
+        Mock::given(method("GET"))
+            .and(path("/Users"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(format!(
+                "[{{\"Id\": \"{}\", \"Name\": \"alyosha\"}}]",
+                user_id
+            )))
+            .mount(&server)
+            .await;
+
+        let result = jellyfin_client.get_user_id("alyosha").await?;
+        assert_eq!(result, Some("123".to_string()));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_episodes() -> anyhow::Result<()> {
+        let server = MockServer::start().await;
+        let jellyfin_client = JellyfinApi::new(&server.uri(), "token");
+        let user_id = "123";
+        let data = json!([
+            {
+                "Id": "14",
+                "Type": "Series",
+                "Name": "test_series",
+                "IsFolder": true,
+                "UserData": {
+                    "Key": "42",
+                    "Played": false,
+                }
+            },
+            {
+                "Id": "15",
+                "Type": "Episode",
+                "Name": "test_episode",
+                "IsFolder": false,
+                "IndexNumber": 8, // episode 8
+                "ParentIndexNumber": 2, // season 2
+                "SeriesName": "test_series",
+                "ParentId": "14",
+                "SeriesId": "14",
+                "UserData": {
+                    "Played": true,
+                    "Key": "some_other_not_useful_id"
+                }
+            }
+        ]);
+
+        Mock::given(method("GET"))
+            .and(path("/Items"))
+            .respond_with(move |request: &wiremock::Request| {
+                let parent_id = request.url.query_pairs().find(|(key, _)| key == "parentId");
+                if parent_id.is_some() {
+                    return ResponseTemplate::new(200).set_body_json(json!({ "Items": [data[1]] }));
+                } else {
+                    return ResponseTemplate::new(200).set_body_json(json!({ "Items": [data[0]] }));
+                }
+            })
+            .mount(&server)
+            .await;
+
+        let result = jellyfin_client.get_episodes(user_id).await?;
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].tvdb_id, 42);
+        assert!(result[0].season_number == 2);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_latest_episodes() -> anyhow::Result<()> {
+        let server = MockServer::start().await;
+        let jellyfin_client = JellyfinApi::new(&server.uri(), "token");
+        let user_id = "123";
+        let data = json!([
+            {
+                "Id": "14",
+                "Type": "Series",
+                "Name": "test_series",
+                "IsFolder": true,
+                "UserData": {
+                    "Key": "42",
+                    "Played": false,
+                }
+            },
+            {
+                "Id": "15",
+                "Type": "Episode",
+                "Name": "test_episode",
+                "IsFolder": false,
+                "IndexNumber": 42, // episode 42
+                "ParentIndexNumber": 1, // season 1
+                "SeriesName": "test_series",
+                "ParentId": "14",
+                "SeriesId": "14",
+                "UserData": {
+                    "Played": true,
+                    "Key": "some_other_not_useful_id"
+                }
+            },
+
+            {
+                "Id": "15",
+                "Type": "Episode",
+                "Name": "test_episode",
+                "IsFolder": false,
+                "IndexNumber": 8, // episode 8
+                "ParentIndexNumber": 2, // season 2
+                "SeriesName": "test_series",
+                "ParentId": "14",
+                "SeriesId": "14",
+                "UserData": {
+                    "Played": true,
+                    "Key": "some_other_not_useful_id"
+                }
+            },
+            {
+                "Id": "16",
+                "Type": "Episode",
+                "Name": "test_episode",
+                "IsFolder": false,
+                "IndexNumber": 9, // episode 8
+                "ParentIndexNumber": 2, // season 2
+                "SeriesName": "test_series",
+                "ParentId": "14",
+                "SeriesId": "14",
+                "UserData": {
+                    "Played": true,
+                    "Key": "some_other_not_useful_id"
+                }
+            },
+            {
+                "Id": "17",
+                "Type": "Episode",
+                "Name": "test_episode",
+                "IsFolder": false,
+                "IndexNumber": 10, // episode 8
+                "ParentIndexNumber": 2, // season 2
+                "SeriesName": "test_series",
+                "ParentId": "14",
+                "SeriesId": "14",
+                "UserData": {
+                    "Played": false,
+                    "Key": "some_other_not_useful_id"
+                }
+            },
+        ]);
+
+        Mock::given(method("GET"))
+            .and(path("/Items"))
+            .respond_with(move |request: &wiremock::Request| {
+                let parent_id = request.url.query_pairs().find(|(key, _)| key == "parentId");
+                if parent_id.is_some() {
+                    return ResponseTemplate::new(200)
+                        .set_body_json(json!({ "Items": [data[1], data[2], data[3]] }));
+                } else {
+                    return ResponseTemplate::new(200).set_body_json(json!({ "Items": [data[0]] }));
+                }
+            })
+            .mount(&server)
+            .await;
+
+        let result = jellyfin_client.get_latest_episodes(user_id).await?;
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[&42].number, 9);
+        assert_eq!(result[&42].season_number, 2);
+        Ok(())
     }
 }

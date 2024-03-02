@@ -13,7 +13,7 @@ mod oauth;
 
 const MAL_AUTH_URL: &str = "https://myanimelist.net/v1/oauth2/authorize";
 const MAL_TOKEN_URL: &str = "https://myanimelist.net/v1/oauth2/token";
-const MAL_TOKEN_PATH: &str = "./token.json";
+const MAL_TOKEN_PATH: &str = "/data/token.json";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or(anyhow!("user does not exist"))?;
     let latest_episodes = jellyfin_api.get_latest_episodes(&user_id).await?;
 
-    // get a token to access the mal api
+    // load or refresh the token
     debug!("getting an access token to communicate with the mal api");
     let mal_token = oauth::load_or_refresh_token(
         &env::var("MAL_CLIENT_ID")?,
@@ -53,7 +53,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // for each series, find the mal id. if the user's latest watched on
     // jellyfin is greater than the latest watch on MAL, update the user's
     for (tvdb_id, episode) in latest_episodes {
-        let mal_id = tvdb_id_to_mal_id(tvdb_id, episode.season_number)?;
+        let mal_id = tvdb_id_to_mal_id(
+            tvdb_id,
+            episode.season_number,
+            "anime-list-master.xml",
+            "anime-list-full.json",
+        )?;
         let mal_latest_episode_number = mal_api.get_latest_episode_number(mal_id).await?;
         if episode.number > mal_latest_episode_number {
             info!(
