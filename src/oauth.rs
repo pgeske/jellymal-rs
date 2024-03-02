@@ -105,6 +105,8 @@ pub async fn initialize_token(
             .request_async(async_http_client)
             .await?;
 
+    println!("Token initialized! Please close the process (Ctrl-C)...");
+
     ClientToken::try_from(token_result)
 }
 
